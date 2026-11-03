@@ -1,64 +1,178 @@
 package com.example.lernpilot
 
-import android.os.Bundle
-import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import android.content.Intent
-import android.widget.Button
+import android.os.Bundle
+import android.view.View
+import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.TextView
 
-class QuizActivity : AppCompatActivity() {
+class QuizActivity : BaseActivity() {
+
+    private var sessionId = -1L
+    private var pendingChoice = -1
+    private var pendingQuestionId = -1L
+    private var busy = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContentView(R.layout.activity_quiz)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
-        val answerGroup = findViewById<RadioGroup>(R.id.answerGroup)
-        val checkButton = findViewById<Button>(R.id.checkAnswerButton)
-        val feedbackText = findViewById<TextView>(R.id.feedbackText)
-        val resultsButton = findViewById<Button>(R.id.showResultsButton)
+        setup(R.layout.activity_quiz)
 
-        var score = 0
+        sessionId = savedInstanceState
+            ?.getLong("session_id", -1L) ?: -1L
 
-        checkButton.setOnClickListener {
-            val selectedId = answerGroup.checkedRadioButtonId
+        pendingChoice = savedInstanceState
+            ?.getInt("pending_choice", -1) ?: -1
 
-            if (selectedId == -1) {
-                feedbackText.text = "Please select an answer."
-                return@setOnClickListener
+        pendingQuestionId = savedInstanceState
+            ?.getLong("pending_question_id", -1L) ?: -1L
+
+        label("Loading quiz…")
+
+        load(
+            work = {
+                val id = if (sessionId > 0) {
+                    sessionId
+                } else {
+                    val topicId = intent.getLongExtra("topic_id", -1L)
+                    db.startOrResumeSession(topicId)
+                }
+
+                db.getQuizState(id)
+            },
+            done = { state ->
+                sessionId = state.sessionId
+                render(state)
             }
+        )
+    }
 
-            val isCorrect = selectedId == R.id.answerB
-            score = if (isCorrect) 1 else 0
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("session_id", sessionId)
+        outState.putInt("pending_choice", pendingChoice)
+        outState.putLong("pending_question_id", pendingQuestionId)
 
-            feedbackText.text = if (isCorrect) {
-                "Correct! val declares a read-only variable."
-            } else {
-                "Incorrect. The correct answer is val."
-            }
+        super.onSaveInstanceState(outState)
+    }
 
-            // Prevent changing or submitting the answer again.
-            for (index in 0 until answerGroup.childCount) {
-                answerGroup.getChildAt(index).isEnabled = false
-            }
+    private fun render(state: QuizState) {
+        busy = false
 
-            checkButton.isEnabled = false
-            resultsButton.isEnabled = true
-        }
-
-        resultsButton.setOnClickListener {
+        if (state.finished) {
             val intent = Intent(this, ResultsActivity::class.java)
-            intent.putExtra("score", score)
-            intent.putExtra("total", 1)
+            intent.putExtra("session_id", state.sessionId)
+
             startActivity(intent)
             finish()
+            return
+        }
+
+        val question = requireNotNull(state.question)
+
+        // Never apply a previous question's unsaved selection to a new one.
+        if (pendingQuestionId != question.id) {
+            pendingChoice = -1
+            pendingQuestionId = question.id
+        }
+
+        content.removeAllViews()
+
+        label(
+            "Question ${state.position + 1} of ${state.total}",
+            26f
+        )
+
+        label(question.text, 22f)
+
+        val group = RadioGroup(this)
+        content.addView(group)
+
+        question.options.forEachIndexed { index, option ->
+            val radio = RadioButton(this)
+
+            radio.id = View.generateViewId()
+            radio.text = option
+            radio.isEnabled = state.selectedIndex == null
+
+            group.addView(radio)
+
+            radio.isChecked =
+                index == (state.selectedIndex ?: pendingChoice)
+        }
+
+        group.setOnCheckedChangeListener { _, checkedId ->
+            pendingChoice = (0 until group.childCount)
+                .firstOrNull {
+                    group.getChildAt(it).id == checkedId
+                } ?: -1
+        }
+
+        val feedback = label("")
+
+        if (state.selectedIndex == null) {
+            button("Check answer") {
+                if (pendingChoice == -1) {
+                    feedback.text = "Select an answer first."
+                } else if (!busy) {
+                    busy = true
+
+                    val selected = pendingChoice
+
+                    load(
+                        work = {
+                            db.submitAnswer(
+                                state.sessionId,
+                                question.id,
+                                selected
+                            )
+
+                            db.getQuizState(state.sessionId)
+                        },
+                        done = { updatedState ->
+                            render(updatedState)
+                        }
+                    )
+                }
+            }
+        } else {
+            val correct =
+                state.selectedIndex == question.correctIndex
+
+            feedback.text = if (correct) {
+                "Correct! ${question.explanation}"
+            } else {
+                "Incorrect. Correct answer: " +
+                        question.options[question.correctIndex] +
+                        ". ${question.explanation}"
+            }
+
+            val buttonText =
+                if (state.position + 1 == state.total) {
+                    "Show results"
+                } else {
+                    "Next question"
+                }
+
+            button(buttonText) {
+                if (!busy) {
+                    busy = true
+                    pendingChoice = -1
+                    pendingQuestionId = -1L
+
+                    load(
+                        work = {
+                            db.advance(
+                                state.sessionId,
+                                state.position
+                            )
+
+                            db.getQuizState(state.sessionId)
+                        },
+                        done = { updatedState ->
+                            render(updatedState)
+                        }
+                    )
+                }
+            }
         }
     }
 }

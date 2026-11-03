@@ -2,24 +2,51 @@ package com.example.lernpilot
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
-import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setup(R.layout.activity_main)
+    }
 
-        // Display the dashboard XML layout.
-        setContentView(R.layout.activity_main)
+    override fun onResume() {
+        super.onResume()
 
-        // Find the button defined in that layout.
-        val startButton = findViewById<Button>(R.id.startLearningButton)
+        content.removeAllViews()
+        label("LernPilot", 28f)
+        label("Loading progress…")
 
-        // Open TopicsActivity when the button is pressed.
-        startButton.setOnClickListener {
-            val intent = Intent(this, TopicsActivity::class.java)
-            startActivity(intent)
-        }
+        load(
+            work = { db.getDashboardStats() },
+            done = { stats ->
+                content.removeAllViews()
+
+                label("LernPilot", 28f)
+                label("Completed quizzes: ${stats.completed}")
+
+                if (stats.answered == 0) {
+                    label("Complete your first quiz to see your accuracy.")
+                } else {
+                    val accuracy = 100 * stats.correct / stats.answered
+
+                    label(
+                        "Accuracy: $accuracy% " +
+                                "(${stats.correct}/${stats.answered})"
+                    )
+                }
+
+                label(
+                    "Choose a topic to start a new quiz " +
+                            "or resume an unfinished one."
+                )
+
+                button("Start learning") {
+                    startActivity(
+                        Intent(this, TopicsActivity::class.java)
+                    )
+                }
+            }
+        )
     }
 }

@@ -1,36 +1,52 @@
 package com.example.lernpilot
 
-import android.os.Bundle
-import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import android.content.Intent
-import android.widget.Button
-import android.widget.TextView
+import android.os.Bundle
 
-class ResultsActivity : AppCompatActivity() {
+class ResultsActivity : BaseActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContentView(R.layout.activity_results)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
-        }
-        val score = intent.getIntExtra("score", 0)
-        val total = intent.getIntExtra("total", 0)
+        setup(R.layout.activity_results)
 
-        findViewById<TextView>(R.id.resultText).text =
-            "You answered $score of $total correctly."
+        label("Results", 28f)
 
-        findViewById<Button>(R.id.backHomeButton).setOnClickListener {
-            val homeIntent = Intent(this, MainActivity::class.java)
-            homeIntent.flags =
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            startActivity(homeIntent)
-            finish()
-        }
+        val sessionId = intent.getLongExtra("session_id", -1L)
+
+        load(
+            work = {
+                require(db.getQuizState(sessionId).finished) {
+                    "This quiz has not been completed."
+                }
+
+                db.getResult(sessionId)
+            },
+            done = { result ->
+                val correct = result.first
+                val total = result.second
+
+                val accuracy =
+                    if (total == 0) 0 else 100 * correct / total
+
+                label("$correct of $total correct", 24f)
+                label("Accuracy: $accuracy%")
+                label("Your answers have been saved on this device.")
+
+                button("Back to dashboard") {
+                    val intent = Intent(
+                        this,
+                        MainActivity::class.java
+                    )
+
+                    intent.addFlags(
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    )
+
+                    startActivity(intent)
+                    finish()
+                }
+            }
+        )
     }
 }
