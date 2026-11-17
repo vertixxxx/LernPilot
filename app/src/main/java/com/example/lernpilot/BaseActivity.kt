@@ -16,8 +16,8 @@ abstract class BaseActivity : AppCompatActivity() {
         private val worker = Executors.newSingleThreadExecutor()
     }
 
-    protected val db: DatabaseHelper
-        get() = DatabaseHelper.get(this)
+    protected val db: QuizRepository
+        get() = QuizRepository.get(this)
 
     protected lateinit var content: LinearLayout
 
