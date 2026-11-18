@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.graphics.drawable.GradientDrawable
+import android.widget.LinearLayout
 
 class QuizActivity : BaseActivity() {
 
@@ -80,6 +82,46 @@ class QuizActivity : BaseActivity() {
             "Question ${state.position + 1} of ${state.total}",
             26f
         )
+        val progressRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(12)
+            ).apply {
+                topMargin = dp(4)
+                bottomMargin = dp(20)
+            }
+        }
+
+        repeat(state.total) { index ->
+            val segmentColor = when {
+                index < state.position -> cyan
+                index == state.position -> pink
+                else -> android.graphics.Color.rgb(37, 58, 75)
+            }
+
+            val segment = View(this).apply {
+                background = GradientDrawable().apply {
+                    setColor(segmentColor)
+                    cornerRadius = dp(2).toFloat()
+                }
+
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    1f
+                ).apply {
+                    if (index < state.total - 1) {
+                        rightMargin = dp(6)
+                    }
+                }
+            }
+
+            progressRow.addView(segment)
+        }
+
+        content.addView(progressRow)
 
         label(question.text, 22f)
 
@@ -90,7 +132,7 @@ class QuizActivity : BaseActivity() {
             val radio = RadioButton(this)
 
             radio.id = View.generateViewId()
-            radio.text = option
+            radio.text = "${'A' + index}  $option"
             radio.isEnabled = state.selectedIndex == null
 
             group.addView(radio)
@@ -99,11 +141,28 @@ class QuizActivity : BaseActivity() {
                 index == (state.selectedIndex ?: pendingChoice)
         }
 
+        fun refreshAnswerStyles() {
+            for (index in 0 until group.childCount) {
+                val radio = group.getChildAt(index) as RadioButton
+
+                styleAnswer(
+                    radio = radio,
+                    selected = radio.isChecked,
+                    submitted = state.selectedIndex != null,
+                    correct = index == question.correctIndex
+                )
+            }
+        }
+
+        refreshAnswerStyles()
+
         group.setOnCheckedChangeListener { _, checkedId ->
             pendingChoice = (0 until group.childCount)
                 .firstOrNull {
                     group.getChildAt(it).id == checkedId
                 } ?: -1
+
+            refreshAnswerStyles()
         }
 
         val feedback = label("")

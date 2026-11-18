@@ -22,7 +22,7 @@ class MainActivity : BaseActivity() {
             done = { stats ->
                 content.removeAllViews()
 
-                label("LernPilot", 28f)
+                label("LERNPILOT", 28f)
                 label("Completed quizzes: ${stats.completed}")
 
                 if (stats.answered == 0) {
